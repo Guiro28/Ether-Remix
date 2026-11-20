@@ -56,6 +56,9 @@ func (s *Server) serveRankedArtwork(w http.ResponseWriter, r *http.Request, key 
 		writeHTTPError(w, 404)
 		return
 	}
+	if shape == "wide" && s.serveRankedBackdrop(w, r, art, req, images, rank, width) {
+		return
+	}
 	for _, img := range images {
 		if img.Kind == frontend.ImagePoster {
 			data, ct, err := art.Read(r.Context(), req, frontend.RankedArtwork(img, rank, shape == "wide"), frontend.ArtworkTransform{Width: width})
@@ -74,6 +77,45 @@ func (s *Server) serveRankedArtwork(w http.ResponseWriter, r *http.Request, key 
 		}
 	}
 	writeHTTPError(w, 404)
+}
+
+// serveRankedBackdrop draws the wide ranked tile from the title's backdrop
+// (the landscape art the shelf shows), with the rank along the right edge.
+// The backdrop is read through the ordinary authorized artwork path; only the
+// overlay is added here. It reports false when the title has no usable
+// backdrop, so the caller falls back to the poster-based tile.
+func (s *Server) serveRankedBackdrop(w http.ResponseWriter, r *http.Request, art frontend.Artwork, req frontend.ArtworkRequest, images []frontend.Image, rank, width int) bool {
+	discovery := s.discovery()
+	if discovery == nil || discovery.Overlays == nil || width < 0 || width > 4000 {
+		return false
+	}
+	for _, img := range images {
+		if img.Kind != frontend.ImageBackdrop {
+			continue
+		}
+		source, _, err := art.Read(r.Context(), req, img, frontend.ArtworkTransform{Width: 1280})
+		if err != nil {
+			return false
+		}
+		data, ct, err := discovery.Overlays.Ranked(r.Context(), source, rank, true)
+		if err != nil {
+			return false
+		}
+		if width > 0 {
+			if data, err = frontend.ResizePoster(data, width); err != nil {
+				return false
+			}
+		}
+		setArtworkHeaders(w.Header(), ct)
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+		w.Header().Add("Vary", "X-Plex-Token")
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		if r.Method != http.MethodHead {
+			_, _ = w.Write(data)
+		}
+		return true
+	}
+	return false
 }
 
 func paintRankedCollection(mc *model.MediaContainer, offset int) {

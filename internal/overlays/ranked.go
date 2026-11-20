@@ -31,7 +31,7 @@ func (s *Service) Ranked(ctx context.Context, source []byte, rank int, wide bool
 	}
 	hash := sha256.New()
 	_, _ = hash.Write(source)
-	_, _ = fmt.Fprintf(hash, "ranked-v3:anton:%d:%t:jpeg88", rank, wide)
+	_, _ = fmt.Fprintf(hash, "ranked-v4:anton:%d:%t:jpeg88", rank, wide)
 	data, err := s.generated.get(ctx, hex.EncodeToString(hash.Sum(nil)), func(ctx context.Context) ([]byte, error) {
 		cfg, _, err := image.DecodeConfig(bytes.NewReader(source))
 		if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > 20_000_000 {
@@ -56,6 +56,9 @@ func (s *Service) Ranked(ctx context.Context, source []byte, rank int, wide bool
 }
 
 func rankedComposite(poster image.Image, rank int, wide bool) *image.RGBA {
+	if wide {
+		return rankedWideComposite(poster, rank)
+	}
 	w, h := 500, 750
 	if wide {
 		w, h = 960, 540
@@ -95,6 +98,48 @@ func rankedComposite(poster image.Image, rank int, wide bool) *image.RGBA {
 		draw.Draw(dst, image.Rect(x, rect.Min.Y, rect.Min.X, rect.Max.Y), image.NewUniform(color.NRGBA{A: alpha}), image.Point{}, draw.Over)
 	}
 	xdraw.CatmullRom.Scale(dst, rect, poster, poster.Bounds(), draw.Over, nil)
+	return dst
+}
+
+// rankedWideComposite fills the landscape tile with the source art (normally
+// the title's backdrop, cropped to 16:9 from its centre) and sets the rank
+// along the right edge at full height. A right-hand shade keeps the numeral
+// readable on bright art while the left of the image stays untouched.
+func rankedWideComposite(art image.Image, rank int) *image.RGBA {
+	w, h := 960, 540
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{14, 15, 19, 255}), image.Point{}, draw.Src)
+	src := art.Bounds()
+	crop := src
+	if src.Dx()*h > src.Dy()*w { // wider than 16:9: trim the sides
+		cw := src.Dy() * w / h
+		crop.Min.X = src.Min.X + (src.Dx()-cw)/2
+		crop.Max.X = crop.Min.X + cw
+	} else if src.Dx()*h < src.Dy()*w { // taller (a poster fallback): trim top and bottom
+		ch := src.Dx() * h / w
+		crop.Min.Y = src.Min.Y + (src.Dy()-ch)/3
+		crop.Max.Y = crop.Min.Y + ch
+	}
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), art, crop, draw.Over, nil)
+	// The numeral area is wide enough for "10" at full height; a single
+	// digit is height-bound and stays against the right edge.
+	area := image.Rect(w*38/100, 0, w-2, h+4)
+	from := area.Min.X - 40
+	if rank < 10 {
+		from = w * 45 / 100
+	}
+	for x := from; x < w; x++ {
+		t := float64(x-from) / float64(w-from)
+		shade := 1 - 0.7*t*t*(3-2*t) // smoothstep to 30% brightness at the edge
+		for y := 0; y < h; y++ {
+			c := dst.RGBAAt(x, y)
+			c.R = uint8(float64(c.R) * shade)
+			c.G = uint8(float64(c.G) * shade)
+			c.B = uint8(float64(c.B) * shade)
+			dst.SetRGBA(x, y, c)
+		}
+	}
+	rankedNumber(dst, rank, area)
 	return dst
 }
 
