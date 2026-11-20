@@ -63,7 +63,7 @@ jobs:
         env:
           TMDB_KEY: ${{ secrets.ETHER_TMDB_BUNDLED_KEY }}
         run: |
-          img=ghcr.io/aerya/ether-remix
+          img=ghcr.io/guiro28/ether-remix
           tags="-t $img:latest -t $img:${{ steps.v.outputs.version }} -t $img:sha-${{ steps.v.outputs.commit }}"
           docker buildx build \
             --platform "${{ steps.v.outputs.platforms }}" \
