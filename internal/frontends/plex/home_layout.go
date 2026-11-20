@@ -171,9 +171,7 @@ func stableHomeHubs(rows []model.Hub) []model.Hub {
 			h.Size = len(h.Metadata)
 			h.TotalSize = model.Ptr(h.Size)
 			h.More = false
-			// Ranked rows are drawn as numbered posters: clients pick the
-			// portrait coverPoster, not the wide coverArt variant.
-			h.Meta = &model.Meta{DisplayImage: []model.DisplayImage{{Type: h.Type, ImageType: rankedDisplayImage}}}
+			h.Meta = &model.Meta{DisplayImage: []model.DisplayImage{{Type: h.Type, ImageType: "coverArt"}}}
 		}
 		out = append(out, h)
 	}
