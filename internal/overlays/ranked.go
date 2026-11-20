@@ -31,7 +31,7 @@ func (s *Service) Ranked(ctx context.Context, source []byte, rank int, wide bool
 	}
 	hash := sha256.New()
 	_, _ = hash.Write(source)
-	_, _ = fmt.Fprintf(hash, "ranked-v3:anton:%d:%t:jpeg88", rank, wide)
+	_, _ = fmt.Fprintf(hash, "ranked-v4:anton:%d:%t:jpeg88", rank, wide)
 	data, err := s.generated.get(ctx, hex.EncodeToString(hash.Sum(nil)), func(ctx context.Context) ([]byte, error) {
 		cfg, _, err := image.DecodeConfig(bytes.NewReader(source))
 		if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > 20_000_000 {
@@ -56,45 +56,46 @@ func (s *Service) Ranked(ctx context.Context, source []byte, rank int, wide bool
 }
 
 func rankedComposite(poster image.Image, rank int, wide bool) *image.RGBA {
-	w, h := 500, 750
-	if wide {
-		w, h = 960, 540
+	if !wide {
+		return rankedPosterComposite(poster, rank)
 	}
+	w, h := 960, 540
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{14, 15, 19, 255}), image.Point{}, draw.Src)
-	var rect image.Rectangle
-	if wide {
-		rect = image.Rect(600, 0, 960, 540)
-	} else {
-		rect = image.Rect(180, 270, 500, 750)
-		// Downsample before enlargement for a bounded soft background. Darkening
-		// and a radial vignette preserve contrast without an empty top band.
-		soft := image.NewRGBA(image.Rect(0, 0, 20, 30))
-		xdraw.BiLinear.Scale(soft, soft.Bounds(), poster, poster.Bounds(), draw.Src, nil)
-		xdraw.CatmullRom.Scale(dst, dst.Bounds(), soft, soft.Bounds(), draw.Src, nil)
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				c := dst.RGBAAt(x, y)
-				distance := math.Min(1, math.Hypot(float64(x-w/2)/float64(w/2), float64(y-h/2)/float64(h/2)))
-				shade := 0.38 - 0.19*distance
-				c.R = uint8(float64(c.R) * shade)
-				c.G = uint8(float64(c.G) * shade)
-				c.B = uint8(float64(c.B) * shade)
-				dst.SetRGBA(x, y, c)
-			}
-		}
-	}
-	if wide {
-		rankedNumber(dst, rank, image.Rect(20, 20, 650, 540))
-	} else {
-		rankedNumber(dst, rank, image.Rect(8, 270, 210, 750))
-	}
+	rect := image.Rect(600, 0, 960, 540)
+	rankedNumber(dst, rank, image.Rect(20, 20, 650, 540))
 	// Soft shadow belongs behind the poster, not on its title treatment.
 	for x := max(0, rect.Min.X-24); x < rect.Min.X; x++ {
 		alpha := uint8(85 * float64(x-(rect.Min.X-24)) / 24)
 		draw.Draw(dst, image.Rect(x, rect.Min.Y, rect.Min.X, rect.Max.Y), image.NewUniform(color.NRGBA{A: alpha}), image.Point{}, draw.Over)
 	}
 	xdraw.CatmullRom.Scale(dst, rect, poster, poster.Bounds(), draw.Over, nil)
+	return dst
+}
+
+// rankedPosterComposite keeps the whole poster as the tile and inlays the
+// rank in its bottom-right corner. A corner shade keeps the numeral legible
+// on bright artwork without darkening the title treatment.
+func rankedPosterComposite(poster image.Image, rank int) *image.RGBA {
+	w, h := 500, 750
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(dst, dst.Bounds(), image.NewUniform(color.RGBA{14, 15, 19, 255}), image.Point{}, draw.Src)
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), poster, poster.Bounds(), draw.Over, nil)
+	for y := h / 2; y < h; y++ {
+		for x := w / 3; x < w; x++ {
+			// 0 along the shade's edge, 1 in the corner.
+			t := math.Max(0, math.Min(1, (float64(x-w/3)/float64(w-w/3)+float64(y-h/2)/float64(h-h/2)-0.6)/1.4))
+			shade := 1 - 0.62*t*t
+			c := dst.RGBAAt(x, y)
+			c.R = uint8(float64(c.R) * shade)
+			c.G = uint8(float64(c.G) * shade)
+			c.B = uint8(float64(c.B) * shade)
+			dst.SetRGBA(x, y, c)
+		}
+	}
+	// Bottom-right quarter: large enough to read on a TV shelf, small enough
+	// to leave the poster's subject and title visible even for "10".
+	rankedNumber(dst, rank, image.Rect(w/2, h*7/10, w-6, h-6))
 	return dst
 }
 

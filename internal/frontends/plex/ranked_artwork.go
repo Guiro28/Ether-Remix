@@ -93,8 +93,13 @@ func paintRankedCollection(mc *model.MediaContainer, offset int) {
 	if len(mc.Metadata) > 0 {
 		typ = mc.Metadata[0].Type
 	}
-	mc.Meta = &model.Meta{DisplayImage: []model.DisplayImage{{Type: typ, ImageType: "coverArt"}}}
+	mc.Meta = &model.Meta{DisplayImage: []model.DisplayImage{{Type: typ, ImageType: rankedDisplayImage}}}
 }
+
+// rankedDisplayImage is the image Plex clients draw for ranked rows: the
+// numbered poster (rank inlaid bottom-right). The wide variant stays listed
+// for clients that ask for it explicitly.
+const rankedDisplayImage = "coverPoster"
 
 // serveRankedPlaceholder preserves the existing upcoming-collection artwork
 // flow. rv contributes only its collection proof; never an arbitrary fetch URL.
