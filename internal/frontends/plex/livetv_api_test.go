@@ -283,16 +283,18 @@ func TestLiveGridAndTuneLoadOneChannel(t *testing.T) {
 
 func TestLiveTVHonestPassAndViewerRestrictions(t *testing.T) {
 	f, service, c := liveFixture(t)
+	// Without a detected Plex Pass the channels are still published; the
+	// subscription itself is reported as it is and the client decides.
 	f.srv.setTestSubscription(false)
 	for _, route := range []string{"/livetv/dvrs", liveProviderPath + "/grid", "/media/grabbers"} {
 		rec := f.get(t, route)
-		if rec.Code != 404 {
-			t.Fatalf("Pass-disabled route advertised %s: %d", route, rec.Code)
+		if rec.Code != 200 {
+			t.Fatalf("Live TV route hidden without a detected Pass %s: %d", route, rec.Code)
 		}
 	}
 	providers := f.request(t, "GET", "/media/providers", map[string]string{"Accept": "application/json"})
-	if strings.Contains(providers.Body.String(), livetv.Provider) {
-		t.Fatal("Pass spoofed")
+	if !strings.Contains(providers.Body.String(), livetv.Provider) || strings.Contains(providers.Body.String(), `"myPlexSubscription":true`) {
+		t.Fatalf("Live TV provider or honest subscription: %s", providers.Body.String())
 	}
 	f.srv.setTestSubscription(true)
 	if e := service.SetChannelViewers(context.Background(), c.ID, livetv.ChannelViewers{Deny: []int64{friendUser.ID}}); e != nil {

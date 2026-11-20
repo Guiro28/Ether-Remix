@@ -79,8 +79,11 @@ type liveContainer struct {
 	MediaGrabber   []liveGrabber `plex:"MediaGrabber"`
 }
 
+// liveTVEnabled publishes Live TV whenever channels exist. Plex clients apply
+// their own Plex Pass entitlement from the honestly reported subscription, so
+// Ether does not second-guess it (a missed detection would hide every channel).
 func (s *Server) liveTVEnabled() bool {
-	return s.svc().liveTV != nil && s.svc().liveTV.Enabled() && s.identity().MyPlexSubscription
+	return s.svc().liveTV != nil && s.svc().liveTV.Enabled()
 }
 func (s *Server) liveTVProvider(ctx context.Context, u *frontend.User) *model.MediaProvider {
 	if !s.liveTVEnabled() || !s.svc().liveTV.VisibleTo(ctx, u) {

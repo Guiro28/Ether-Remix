@@ -23,9 +23,7 @@ func (a *App) extraHomeRows(ctx context.Context, u *core.User, hc core.HubContex
 	if a.livetv != nil {
 		rows.Live = a.livetv.HomeHub
 	}
-	if a.registrar != nil {
-		rows.LiveEnabled = func() bool { return a.registrar.Status().PlexPass }
-	}
+	rows.LiveEnabled = func() bool { return true }
 	return rows.Rows(ctx, u, hc, section, limit)
 }
 

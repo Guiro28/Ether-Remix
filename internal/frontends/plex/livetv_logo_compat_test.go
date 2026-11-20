@@ -145,8 +145,8 @@ func TestLiveChannelLogoPlezyCompatibility(t *testing.T) {
 		}
 	}
 	f.srv.setTestSubscription(false)
-	if rec := f.get(t, "/photo/:/transcode?url="+url.QueryEscape(liveLogo(livetv.ToFrontendChannel(external)))); rec.Code != http.StatusNotFound {
-		t.Fatalf("disabled live TV: %d", rec.Code)
+	if rec := f.get(t, "/photo/:/transcode?url="+url.QueryEscape(liveLogo(livetv.ToFrontendChannel(external)))); rec.Code != http.StatusOK {
+		t.Fatalf("live TV logo without a detected Pass: %d", rec.Code)
 	}
 }
 
